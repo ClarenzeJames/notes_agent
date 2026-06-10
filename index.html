@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>notes-answer-agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0e0e10;
+      --bg2:      #1a1a1e;
+      --bg3:      #222228;
+      --border:   #2e2e36;
+      --border2:  #3e3e4a;
+      --text:     #e8e8f0;
+      --muted:    #888899;
+      --hint:     #55556a;
+      --green:    #3dd68c;
+      --green-bg: #0d2b1e;
+      --amber:    #f4b84a;
+      --amber-bg: #2b1e08;
+      --red:      #f47a7a;
+      --red-bg:   #2b0d0d;
+      --blue:     #7ab8f4;
+      --blue-bg:  #0d1e2b;
+      --radius:   8px;
+      --mono:     'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      --sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 24px 16px 40px;
+      min-height: 100vh;
+    }
+
+    .window {
+      width: 100%;
+      max-width: 740px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 80vh;
+    }
+
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .titlebar-label {
+      flex: 1;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    .status-bar {
+      padding: 8px 16px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg3);
+      flex-shrink: 0;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.ok    { background: var(--green); }
+    .status-dot.error { background: var(--red); }
+    .status-dot.loading { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .status-text { color: var(--muted); }
+    .status-text.ok    { color: var(--green); }
+    .status-text.error { color: var(--red); }
+
+    .quick-btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      flex-shrink: 0;
+    }
+    .qbtn {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .qbtn:hover { color: var(--text); border-color: var(--text); background: var(--bg3); }
+    .qbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scroll-behavior: smooth;
+    }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--hint);
+      font-size: 12px;
+      min-height: 200px;
+    }
+    .empty-icon { font-size: 32px; opacity: 0.25; }
+
+    .msg { display: flex; flex-direction: column; gap: 4px; max-width: 88%; }
+    .msg.user  { align-self: flex-end;  align-items: flex-end; }
+    .msg.agent { align-self: flex-start; align-items: flex-start; }
+
+    .bubble {
+      font-size: 13px;
+      line-height: 1.65;
+      padding: 9px 13px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user  .bubble { background: var(--blue-bg);  border-color: #1e3a52; color: var(--text); }
+    .msg.agent .bubble { background: var(--bg3);      border-color: var(--border); }
+
+    .tool-call {
+      font-size: 11px;
+      padding: 6px 11px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      color: var(--muted);
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      max-width: 100%;
+    }
+    .tool-call.running { color: var(--amber); border-color: #3a2e10; background: var(--amber-bg); }
+    .tool-call.done    { color: var(--green); border-color: #0d2e1a; background: var(--green-bg); }
+    .tool-call.error   { color: var(--red);   border-color: #2e0d0d; background: var(--red-bg); }
+
+    .tool-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+    .tool-name { font-weight: 600; font-size: 11px; }
+    .tool-detail { font-size: 10px; opacity: 0.7; margin-top: 2px; word-break: break-all; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 11px; height: 11px;
+      border: 1.5px solid var(--border2);
+      border-top-color: var(--amber);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--bg3);
+      flex-shrink: 0;
+    }
+    .input-row input {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 8px 13px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border2);
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input-row input:focus { border-color: var(--blue); }
+    .input-row input::placeholder { color: var(--hint); }
+    .input-row button {
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border2);
+      background: var(--bg);
+      color: var(--muted);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: color 0.15s, border-color 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .input-row button:hover:not(:disabled) { color: var(--text); border-color: var(--text); }
+    .input-row button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    @media (max-width: 480px) {
+      body { padding: 0; }
+      .window { border-radius: 0; min-height: 100vh; border: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="window" id="app">
+    <div class="titlebar">
+      <div class="dot" style="background:#ff5f57"></div>
+      <div class="dot" style="background:#febc2e"></div>
+      <div class="dot" style="background:#28c840"></div>
+      <span class="titlebar-label">notes-answer-agent</span>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-dot loading" id="statusDot"></div>
+      <span class="status-text loading" id="statusText">loading config...</span>
+    </div>
+
+    <div class="quick-btns" id="quickBtns">
+      <button class="qbtn" disabled onclick="quickSend('Read my questions file and answer all questions in answers.md')">▶ answer all questions</button>
+      <button class="qbtn" disabled onclick="quickSend('List the files in my repo')">▶ list files</button>
+      <button class="qbtn" disabled onclick="quickSend('Show me what questions are in questions.md')">▶ show questions</button>
+      <button class="qbtn" disabled onclick="quickSend('Show me the current contents of answers.md')">▶ show answers</button>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">⌘</div>
+        <span>loading configuration from server...</span>
+      </div>
+    </div>
+
+    <div class="input-row">
+      <input type="text" id="userInput" placeholder="e.g. answer all my questions..." disabled
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}" />
+      <button id="sendBtn" disabled onclick="sendMessage()">send →</button>
+    </div>
+  </div>
+
+  <script>
+    let CONFIG = {};
+    let conversationHistory = [];
+    let isRunning = false;
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Config load failed');
+        CONFIG = data;
+        setStatus('ok', `connected · ${CONFIG.ghRepo} (${CONFIG.ghBranch})`);
+        enableUI();
+        setEmptyState('config loaded — try a quick action above or type below');
+      } catch (e) {
+        setStatus('error', e.message);
+        setEmptyState('failed to load config — check your Vercel environment variables');
+      }
+    }
+
+    function setStatus(type, text) {
+      const dot = document.getElementById('statusDot');
+      const txt = document.getElementById('statusText');
+      dot.className = `status-dot ${type}`;
+      txt.className = `status-text ${type}`;
+      txt.textContent = text;
+    }
+
+    function enableUI() {
+      document.getElementById('userInput').disabled = false;
+      document.getElementById('sendBtn').disabled = false;
+      document.querySelectorAll('.qbtn').forEach(b => b.disabled = false);
+    }
+
+    function setEmptyState(msg) {
+      const el = document.getElementById('emptyState');
+      if (el) el.querySelector('span').textContent = msg;
+    }
+
+    function ghRequest(method, path, body) {
+      const url = `https://api.github.com/repos/${CONFIG.ghRepo}/${path}`;
+      const opts = {
+        method,
+        headers: {
+          'Authorization': `Bearer ${CONFIG.ghToken}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'Content-Type': 'application/json',
+        }
+      };
+      if (body) opts.body = JSON.stringify(body);
+      return fetch(url, opts).then(r => {
+        if (!r.ok) return r.text().then(t => { throw new Error(`GitHub ${r.status}: ${t.slice(0,200)}`); });
+        return r.json();
+      });
+    }
+
+    async function executeTool(name, input) {
+      if (name === 'list_repo_files') {
+        const data = await ghRequest('GET', `contents/${input.path || ''}?ref=${CONFIG.ghBranch}`);
+        return Array.isArray(data)
+          ? data.map(f => `${f.type === 'dir' ? '[dir]' : '[file]'} ${f.path}`).join('\n')
+          : data.name;
+      }
+      if (name === 'read_file') {
+        const data = await ghRequest('GET', `contents/${input.path}?ref=${CONFIG.ghBranch}`);
+        return atob(data.content.replace(/\n/g, ''));
+      }
+      if (name === 'write_file') {
+        let sha;
+        try {
+          const existing = await ghRequest('GET', `contents/${input.path}?ref=${CONFIG.ghBranch}`);
+          sha = existing.sha;
+        } catch (_) {}
+        const encoded = btoa(unescape(encodeURIComponent(input.content)));
+        const body = { message: input.commit_message || `chore: update ${input.path}`, content: encoded, branch: CONFIG.ghBranch };
+        if (sha) body.sha = sha;
+        await ghRequest('PUT', `contents/${input.path}`, body);
+        return `Successfully wrote ${input.path} to ${CONFIG.ghRepo}`;
+      }
+      throw new Error(`Unknown tool: ${name}`);
+    }
+
+    const TOOLS = [
+      {
+        name: 'list_repo_files',
+        description: 'List files and directories in the GitHub repo at an optional path.',
+        input_schema: {
+          type: 'object',
+          properties: { path: { type: 'string', description: 'Directory path. Empty string for root.' } },
+          required: []
+        }
+      },
+      {
+        name: 'read_file',
+        description: 'Read the contents of a file from the GitHub repo.',
+        input_schema: {
+          type: 'object',
+          properties: { path: { type: 'string', description: 'File path, e.g. questions.md' } },
+          required: ['path']
+        }
+      },
+      {
+        name: 'write_file',
+        description: 'Write or update a file in the GitHub repo. Creates it if it does not exist.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'File path to write, e.g. answers.md' },
+            content: { type: 'string', description: 'Full file content' },
+            commit_message: { type: 'string', description: 'Git commit message' }
+          },
+          required: ['path', 'content']
+        }
+      }
+    ];
+
+    async function runAgentLoop(userMessage) {
+      conversationHistory.push({ role: 'user', content: userMessage });
+
+      const system = `You are a helpful notes assistant with access to the user's GitHub repository.
+You can list files, read markdown files, and write files back to the repo.
+
+When asked to answer questions:
+1. Read the questions file
+2. Extract all questions
+3. Write thorough, clear answers in Markdown — use a ## heading per question followed by the answer
+4. Write the result to the answers file
+5. Confirm what you did
+
+Repo: ${CONFIG.ghRepo}, Branch: ${CONFIG.ghBranch}, Questions file: ${CONFIG.questionsFile}, Answers file: ${CONFIG.answersFile}
+Always use these file paths unless the user specifies otherwise.`;
+
+      while (true) {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': CONFIG.anthropicKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 4096,
+            system,
+            tools: TOOLS,
+            messages: conversationHistory,
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(`Anthropic API ${res.status}: ${err.slice(0, 300)}`);
+        }
+
+        const data = await res.json();
+        conversationHistory.push({ role: 'assistant', content: data.content });
+
+        const textBlocks = data.content.filter(b => b.type === 'text');
+        if (textBlocks.length && data.stop_reason === 'end_turn') {
+          addMsg('agent', textBlocks.map(b => b.text).join('\n'));
+          break;
+        }
+
+        if (textBlocks.length && data.stop_reason === 'tool_use') {
+          const txt = textBlocks.map(b => b.text).join('\n').trim();
+          if (txt) addMsg('agent', txt);
+        }
+
+        if (data.stop_reason === 'tool_use') {
+          const toolUseBlocks = data.content.filter(b => b.type === 'tool_use');
+          const toolResults = [];
+
+          for (const block of toolUseBlocks) {
+            const tc = addToolCall(block.name, block.input, 'running');
+            try {
+              const result = await executeTool(block.name, block.input);
+              const preview = String(result).slice(0, 90) + (String(result).length > 90 ? '…' : '');
+              updateToolCall(tc, 'done', block.name, preview);
+              toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: String(result) });
+            } catch (e) {
+              updateToolCall(tc, 'error', block.name, e.message.slice(0, 100));
+              toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: `Error: ${e.message}`, is_error: true });
+            }
+          }
+
+          conversationHistory.push({ role: 'user', content: toolResults });
+          continue;
+        }
+
+        break;
+      }
+    }
+
+    function addMsg(role, content) {
+      const msgs = document.getElementById('messages');
+      const empty = document.getElementById('emptyState');
+      if (empty) empty.remove();
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = content;
+      div.appendChild(bubble);
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function addToolCall(toolName, input, state) {
+      const msgs = document.getElementById('messages');
+      const wrap = document.createElement('div');
+      wrap.className = 'msg agent';
+      const tc = document.createElement('div');
+      tc.className = `tool-call ${state}`;
+      const detail = input.path || '';
+      tc.innerHTML = buildToolHTML(state, toolName, detail);
+      wrap.appendChild(tc);
+      msgs.appendChild(wrap);
+      msgs.scrollTop = msgs.scrollHeight;
+      return tc;
+    }
+
+    function buildToolHTML(state, name, detail) {
+      const icons = { running: '<div class="spinner"></div>', done: '✓', error: '✕' };
+      return `<span class="tool-icon">${icons[state] || '·'}</span>
+        <div>
+          <div class="tool-name">${name}</div>
+          ${detail ? `<div class="tool-detail">${detail}</div>` : ''}
+        </div>`;
+    }
+
+    function updateToolCall(tc, state, name, detail) {
+      tc.className = `tool-call ${state}`;
+      tc.innerHTML = buildToolHTML(state, name, detail);
+    }
+
+    async function sendMessage() {
+      if (isRunning) return;
+      const input = document.getElementById('userInput');
+      const btn = document.getElementById('sendBtn');
+      const text = input.value.trim();
+      if (!text) return;
+
+      addMsg('user', text);
+      input.value = '';
+      isRunning = true;
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        await runAgentLoop(text);
+      } catch (e) {
+        addMsg('agent', `Error: ${e.message}`);
+      } finally {
+        isRunning = false;
+        btn.disabled = false;
+        btn.textContent = 'send →';
+        document.querySelectorAll('.qbtn').forEach(b => b.disabled = false);
+      }
+    }
+
+    function quickSend(text) {
+      if (isRunning) return;
+      document.getElementById('userInput').value = text;
+      sendMessage();
+    }
+
+    loadConfig();
+  </script>
+</body>
+</html>
